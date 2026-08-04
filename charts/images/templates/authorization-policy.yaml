@@ -28,6 +28,7 @@ spec:
               - POST
             paths:
               - /agynio.api.images.v1.ImagesService/ResolveVersion
+              - /agynio.api.images.v1.ImagesService/ResolveImage
 ---
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy

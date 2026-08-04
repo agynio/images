@@ -35,6 +35,10 @@ service ImagesService {
   // serve a pull. Internal only - restricted by Istio, not by an identity
   // check.
   rpc ResolveVersion(ResolveVersionRequest) returns (ResolveVersionResponse);
+  // Resolve a reference to an upstream repository and credential without
+  // naming a tag. A blob request carries a digest and no tag, so the Image
+  // Proxy cannot use ResolveVersion for it. Internal only.
+  rpc ResolveImage(ResolveImageRequest) returns (ResolveImageResponse);
   // Create an image if no image of that name exists in the organization, and
   // return the existing one otherwise. Never updates, so re-running an upgrade
   // cannot overwrite a change someone made by hand. Internal only.
@@ -251,6 +255,24 @@ message ResolveVersionResponse {
   // repositories.
   string username = 5;
   string password = 6;
+}
+
+message ResolveImageRequest {
+  oneof reference {
+    string image_id = 1; // UUID
+    ImageRef ref = 2;
+  }
+  // Optional. When set, visibility is enforced against this organization.
+  string consumer_organization_id = 3;
+}
+
+message ResolveImageResponse {
+  Image image = 1;
+  string repository = 2;
+  // Registry credential for the repository. Empty for anonymously readable
+  // repositories.
+  string username = 3;
+  string password = 4;
 }
 
 message RegisterPlatformImageRequest {

@@ -256,19 +256,13 @@ func (s *Server) RefreshImage(ctx context.Context, req *imagesv1.RefreshImageReq
 // by an identity check, because its callers - the Agents service validating a
 // reference and the Image Proxy serving a pull - hold no OpenFGA tuples.
 func (s *Server) ResolveVersion(ctx context.Context, req *imagesv1.ResolveVersionRequest) (*imagesv1.ResolveVersionResponse, error) {
-	image, err := s.resolveReference(ctx, req)
+	image, err := s.resolveReference(ctx, req.GetImageId(), req.GetRef())
 	if err != nil {
 		return nil, err
 	}
 
-	if consumer := req.GetConsumerOrganizationId(); consumer != "" {
-		consumerID, err := parseUUID("consumer_organization_id", consumer)
-		if err != nil {
-			return nil, err
-		}
-		if image.Visibility != store.VisibilityPublic && image.OrganizationID != consumerID {
-			return nil, status.Error(codes.NotFound, "image not found")
-		}
+	if err := s.enforceConsumer(image, req.GetConsumerOrganizationId()); err != nil {
+		return nil, err
 	}
 	if req.GetRequireType() != imagesv1.ImageType_IMAGE_TYPE_UNSPECIFIED {
 		required, err := fromProtoType(req.GetRequireType())
@@ -302,6 +296,28 @@ func (s *Server) ResolveVersion(ctx context.Context, req *imagesv1.ResolveVersio
 		Repository: image.Repository,
 		Tag:        tag,
 		State:      toProtoState(version.State),
+		Username:   credential.Username,
+		Password:   credential.Password,
+	}, nil
+}
+
+// ResolveImage resolves a reference without naming a tag. A blob request
+// carries a digest and no tag, so the proxy cannot use ResolveVersion for it.
+func (s *Server) ResolveImage(ctx context.Context, req *imagesv1.ResolveImageRequest) (*imagesv1.ResolveImageResponse, error) {
+	image, err := s.resolveReference(ctx, req.GetImageId(), req.GetRef())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.enforceConsumer(image, req.GetConsumerOrganizationId()); err != nil {
+		return nil, err
+	}
+	credential, err := s.resolveCredential(ctx, image)
+	if err != nil {
+		return nil, err
+	}
+	return &imagesv1.ResolveImageResponse{
+		Image:      toProtoImage(image),
+		Repository: image.Repository,
 		Username:   credential.Username,
 		Password:   credential.Password,
 	}, nil
@@ -365,10 +381,10 @@ func (s *Server) RegisterPlatformImage(ctx context.Context, req *imagesv1.Regist
 
 // resolveReference settles which image a request names - by id, or by the
 // (organization, name) pair the proxy's reference path encodes.
-func (s *Server) resolveReference(ctx context.Context, req *imagesv1.ResolveVersionRequest) (store.Image, error) {
-	switch reference := req.GetReference().(type) {
-	case *imagesv1.ResolveVersionRequest_ImageId:
-		id, err := parseUUID("image_id", reference.ImageId)
+func (s *Server) resolveReference(ctx context.Context, imageID string, ref *imagesv1.ImageRef) (store.Image, error) {
+	switch {
+	case imageID != "":
+		id, err := parseUUID("image_id", imageID)
 		if err != nil {
 			return store.Image{}, err
 		}
@@ -377,12 +393,12 @@ func (s *Server) resolveReference(ctx context.Context, req *imagesv1.ResolveVers
 			return store.Image{}, translateStoreError(err)
 		}
 		return image, nil
-	case *imagesv1.ResolveVersionRequest_Ref:
-		organizationID, err := parseUUID("ref.organization_id", reference.Ref.GetOrganizationId())
+	case ref != nil:
+		organizationID, err := parseUUID("ref.organization_id", ref.GetOrganizationId())
 		if err != nil {
 			return store.Image{}, err
 		}
-		image, err := s.store.GetImageByName(ctx, organizationID, reference.Ref.GetName())
+		image, err := s.store.GetImageByName(ctx, organizationID, ref.GetName())
 		if err != nil {
 			return store.Image{}, translateStoreError(err)
 		}
@@ -390,6 +406,23 @@ func (s *Server) resolveReference(ctx context.Context, req *imagesv1.ResolveVers
 	default:
 		return store.Image{}, status.Error(codes.InvalidArgument, "reference: one of image_id or ref is required")
 	}
+}
+
+// enforceConsumer applies visibility to a resolving caller. An image the
+// consumer may not see is reported as absent rather than forbidden, matching
+// what a read through the Gateway would say.
+func (s *Server) enforceConsumer(image store.Image, consumerOrganizationID string) error {
+	if consumerOrganizationID == "" {
+		return nil
+	}
+	consumerID, err := parseUUID("consumer_organization_id", consumerOrganizationID)
+	if err != nil {
+		return err
+	}
+	if image.Visibility != store.VisibilityPublic && image.OrganizationID != consumerID {
+		return status.Error(codes.NotFound, "image not found")
+	}
+	return nil
 }
 
 func (s *Server) checkReadable(ctx context.Context, repository string, credential registry.Credential) error {
