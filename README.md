@@ -13,17 +13,20 @@ update, or delete API for them.
 | Path | Contents |
 |---|---|
 | `cmd/images-service` | Entry point |
+| `cmd/provisioner` | Registers the platform's own resources on install and upgrade |
 | `internal/store` | `images` and `image_versions` |
 | `internal/registry` | Upstream registry reads (`go-containerregistry`) |
 | `internal/discovery` | The poll loop and one discovery pass |
 | `internal/server` | gRPC surface, authorization, credential handling |
+| `internal/provision` | What a release declares must exist, and how it is applied |
 | `charts/images` | Helm chart, including the Istio policy guarding the internal RPCs |
-| `proto/` | Vendored `agynio/api/images/v1`, temporary — see below |
+| `proto/` | Vendored `agynio/api/images/v1` and `organizations/v1`, temporary — see below |
 
 ## Protos
 
-`agynio/api/images/v1` is vendored under `proto/` so this service builds before
-the change lands in `buf.build/agynio/api`. Once it is published there, delete
+`agynio/api/images/v1` and the `organizations/v1` additions are vendored under
+`proto/` so this service builds before the changes land in
+`buf.build/agynio/api`. Once it is published there, delete
 `proto/` and drop the `directory` input from `buf.gen.yaml`; the module input
 already present covers the rest.
 
@@ -71,3 +74,20 @@ discovery rather than a stub. `TEST_PUBLIC_REPOSITORY` overrides which one.
 | `NOTIFICATIONS_GRPC_TARGET` | optional | `image.updated`; without it, Console lists refresh on open |
 | `DISCOVERY_INTERVAL` | `15m` | How often each repository is polled |
 | `DISCOVERY_TIMEOUT` | `60s` | Budget for one image's pass |
+
+## Provisioning
+
+`cmd/provisioner` registers the platform organization and the images a release
+ships. It runs as a Helm hook on install and upgrade; both calls are
+create-if-absent, so re-running changes nothing, an operator's edit survives,
+and a record they deleted comes back on the next upgrade. What it provisions is
+declared in `values.provisioning`, not in the binary.
+
+A failed run does not fail the release — the resource is simply absent until the
+next upgrade.
+
+To run it by hand against the VM:
+
+```bash
+ORGANIZATIONS_GRPC_TARGET=127.0.0.1:15081 IMAGES_GRPC_TARGET=127.0.0.1:15071 PROVISION_CONFIG=./provision.json go run ./cmd/provisioner
+```
