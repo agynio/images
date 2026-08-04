@@ -22,8 +22,8 @@ import (
 	"os"
 	"time"
 
-	imagesv1 "github.com/agynio/image-catalog/gen/agynio/api/images/v1"
-	organizationsv1 "github.com/agynio/image-catalog/gen/agynio/api/organizations/v1"
+	imagesv1 "github.com/agynio/images/gen/agynio/api/images/v1"
+	organizationsv1 "github.com/agynio/images/gen/agynio/api/organizations/v1"
 	"google.golang.org/grpc"
 )
 

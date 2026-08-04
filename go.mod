@@ -1,4 +1,4 @@
-module github.com/agynio/image-catalog
+module github.com/agynio/images
 
 go 1.25.7
 

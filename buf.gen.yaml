@@ -3,7 +3,7 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/agynio/image-catalog/gen
+      value: github.com/agynio/images/gen
 plugins:
   - remote: buf.build/protocolbuffers/go
     out: gen

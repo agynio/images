@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 
-	authorizationv1 "github.com/agynio/image-catalog/gen/agynio/api/authorization/v1"
-	"github.com/agynio/image-catalog/internal/store"
+	authorizationv1 "github.com/agynio/images/gen/agynio/api/authorization/v1"
+	"github.com/agynio/images/internal/store"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

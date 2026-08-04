@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	notificationsv1 "github.com/agynio/image-catalog/gen/agynio/api/notifications/v1"
-	"github.com/agynio/image-catalog/internal/store"
+	notificationsv1 "github.com/agynio/images/gen/agynio/api/notifications/v1"
+	"github.com/agynio/images/internal/store"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

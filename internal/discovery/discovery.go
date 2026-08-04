@@ -7,8 +7,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/agynio/image-catalog/internal/registry"
-	"github.com/agynio/image-catalog/internal/store"
+	"github.com/agynio/images/internal/registry"
+	"github.com/agynio/images/internal/store"
 	"github.com/google/uuid"
 )
 

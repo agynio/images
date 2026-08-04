@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	imagesv1 "github.com/agynio/image-catalog/gen/agynio/api/images/v1"
+	imagesv1 "github.com/agynio/images/gen/agynio/api/images/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"

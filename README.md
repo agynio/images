@@ -1,4 +1,4 @@
-# image-catalog
+# images
 
 The Images service. It owns the [image catalog](https://github.com/agynio/architecture/blob/main/architecture/images-service.md):
 the `Image` records an organization authors, and the `Version` records the

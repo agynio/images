@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	secretsv1 "github.com/agynio/image-catalog/gen/agynio/api/secrets/v1"
-	"github.com/agynio/image-catalog/internal/registry"
-	"github.com/agynio/image-catalog/internal/store"
+	secretsv1 "github.com/agynio/images/gen/agynio/api/secrets/v1"
+	"github.com/agynio/images/internal/registry"
+	"github.com/agynio/images/internal/store"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

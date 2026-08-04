@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	imagesv1 "github.com/agynio/image-catalog/gen/agynio/api/images/v1"
-	"github.com/agynio/image-catalog/internal/store"
+	imagesv1 "github.com/agynio/images/gen/agynio/api/images/v1"
+	"github.com/agynio/images/internal/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

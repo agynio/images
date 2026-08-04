@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	imagesv1 "github.com/agynio/image-catalog/gen/agynio/api/images/v1"
-	organizationsv1 "github.com/agynio/image-catalog/gen/agynio/api/organizations/v1"
-	"github.com/agynio/image-catalog/internal/provision"
+	imagesv1 "github.com/agynio/images/gen/agynio/api/images/v1"
+	organizationsv1 "github.com/agynio/images/gen/agynio/api/organizations/v1"
+	"github.com/agynio/images/internal/provision"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
