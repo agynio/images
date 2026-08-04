@@ -356,6 +356,12 @@ func (s *Server) RegisterPlatformImage(ctx context.Context, req *imagesv1.Regist
 	}
 	input.OrganizationID = organizationID
 
+	// Readability is deliberately not checked here, unlike CreateImage. A user
+	// typo should fail at registration; a platform image registered during
+	// install should not take the install down because a registry is briefly
+	// unreachable, or because the release that publishes the image and the
+	// release that registers it land seconds apart. Discovery flags it stale
+	// and picks it up on the next pass.
 	secretID, err := s.storeCredential(ctx, organizationID, input.Name, req.GetPassword())
 	if err != nil {
 		return nil, err
