@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "images.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "images.name" . }}
+    helm.sh/chart: {{ include "images.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "images.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "images.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- with .Values.podLabels }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "images.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      containers:
+        - name: images
+          {{- with .Values.securityContext }}
+          securityContext:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+          {{- $db := .Values.database -}}
+          {{- $url := "" -}}
+          {{- $secretName := "" -}}
+          {{- $secretKey := "database-url" -}}
+          {{- if $db }}
+            {{- with $db.url }}
+              {{- $url = . -}}
+            {{- end }}
+            {{- with $db.existingSecret }}
+              {{- with .name }}
+                {{- $secretName = . -}}
+              {{- end }}
+              {{- with .key }}
+                {{- $secretKey = . -}}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- if and $secretName $url }}
+            {{- fail "set only one of database.url or database.existingSecret.name" -}}
+          {{- end }}
+          env:
+            - name: DATABASE_URL
+              {{- if $secretName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $secretKey }}
+              {{- else }}
+              value: {{ required "database.url or database.existingSecret.name must be set" $url | quote }}
+              {{- end }}
+            - name: AUTHORIZATION_GRPC_TARGET
+              value: {{ required "authorization.grpcTarget must be set" .Values.authorization.grpcTarget | quote }}
+            - name: SECRETS_GRPC_TARGET
+              value: {{ required "secretsService.grpcTarget must be set" .Values.secretsService.grpcTarget | quote }}
+            {{- with .Values.notifications.grpcTarget }}
+            - name: NOTIFICATIONS_GRPC_TARGET
+              value: {{ . | quote }}
+            {{- end }}
+            - name: DISCOVERY_INTERVAL
+              value: {{ .Values.discovery.interval | quote }}
+            - name: DISCOVERY_TIMEOUT
+              value: {{ .Values.discovery.timeout | quote }}
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+      {{- end }}

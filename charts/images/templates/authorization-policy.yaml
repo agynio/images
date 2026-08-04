@@ -1,0 +1,56 @@
+{{- if .Values.internalAuthorizationPolicy.enabled }}
+{{- $namespace := .Release.Namespace }}
+# ResolveVersion hands back the registry credential stored on an image, and
+# RegisterPlatformImage creates records with no user identity behind them.
+# Neither carries an identity a permission check could refuse, so who may reach
+# them at all is settled here.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ .Release.Name }}-resolve-version
+  labels:
+    app.kubernetes.io/name: {{ include "images.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "images.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  action: DENY
+  rules:
+    - from:
+        - source:
+            notPrincipals:
+{{- include "images.principals" (dict "accounts" .Values.internalAuthorizationPolicy.resolveVersionServiceAccounts "namespace" $namespace) | trim | nindent 14 }}
+      to:
+        - operation:
+            methods:
+              - POST
+            paths:
+              - /agynio.api.images.v1.ImagesService/ResolveVersion
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ .Release.Name }}-register-platform-image
+  labels:
+    app.kubernetes.io/name: {{ include "images.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "images.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  action: DENY
+  rules:
+    - from:
+        - source:
+            notPrincipals:
+{{- include "images.principals" (dict "accounts" .Values.internalAuthorizationPolicy.registerServiceAccounts "namespace" $namespace) | trim | nindent 14 }}
+      to:
+        - operation:
+            methods:
+              - POST
+            paths:
+              - /agynio.api.images.v1.ImagesService/RegisterPlatformImage
+{{- end }}

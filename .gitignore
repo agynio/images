@@ -1,0 +1,6 @@
+gen/
+
+# devspace writes session logs into the working tree.
+.devspace/
+
+.DS_Store
