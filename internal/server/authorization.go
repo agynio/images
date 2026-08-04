@@ -20,16 +20,16 @@ const (
 // against existing organization relations, so images need no per-resource
 // tuples and no share management.
 
+// requireOrganizationOwner gates the authored writes. It demands an identity
+// rather than tolerating its absence: the Gateway forwards a request with no
+// identity when it carries no token, so treating absence as an internal caller
+// would let anyone who can reach the Gateway author images. The internal write
+// path is RegisterPlatformImage, which is a separate RPC the Gateway does not
+// expose and Istio restricts.
 func (s *Server) requireOrganizationOwner(ctx context.Context, organizationID uuid.UUID) error {
-	identityID, hasIdentity, err := optionalIdentityFromContext(ctx)
+	identityID, err := identityFromContext(ctx)
 	if err != nil {
 		return err
-	}
-	if !hasIdentity {
-		// An internal caller reaches this service over the mesh and holds no
-		// tuples, so a check could only ever refuse it. Which internal callers
-		// may reach which RPCs is settled by Istio.
-		return nil
 	}
 	return s.requireRelation(ctx, identityID, "owner", organizationID)
 }
@@ -98,6 +98,17 @@ func (s *Server) requireRelation(ctx context.Context, identityID uuid.UUID, rela
 		return status.Errorf(codes.PermissionDenied, "identity lacks %s on organization", relation)
 	}
 	return nil
+}
+
+func identityFromContext(ctx context.Context) (uuid.UUID, error) {
+	identityID, hasIdentity, err := optionalIdentityFromContext(ctx)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+	if !hasIdentity {
+		return uuid.UUID{}, status.Error(codes.Unauthenticated, "identity not available: x-identity-id not found in metadata")
+	}
+	return identityID, nil
 }
 
 // optionalIdentityFromContext reports the caller's identity when one is
