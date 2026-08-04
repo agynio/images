@@ -78,6 +78,30 @@ internalAuthorizationPolicy:
     - name: platform-provisioner
       namespace: ""
 
+# Resources a freshly installed platform needs before anyone can use it. The
+# calls behind this are create-if-absent, so it runs on every install and every
+# upgrade without a guard, and an operator's edit to a provisioned record
+# survives the next release.
+provisioning:
+  enabled: true
+  serviceAccountName: platform-provisioner
+  organizationsGrpcTarget: "organizations:50051"
+  ttlSecondsAfterFinished: 600
+  # The organization platform-shipped resources live in. It has no members;
+  # cluster admins already hold owner-level access to every organization.
+  organization:
+    slug: agyn-platform
+    name: Agyn Platform
+  # Registered public, which is what makes them usable from every organization.
+  images: []
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
 autoscaling:
   enabled: false
   minReplicas: 1

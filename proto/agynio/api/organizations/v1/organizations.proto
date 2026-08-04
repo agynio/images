@@ -1,0 +1,270 @@
+syntax = "proto3";
+
+package agynio.api.organizations.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/agynio/api/gen/agynio/api/organizations/v1;organizationsv1";
+
+// OrganizationsService manages organization definitions.
+//
+// This is a control-plane service. It stores desired state;
+// other services reconcile toward it.
+service OrganizationsService {
+  rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse);
+  rpc GetOrganization(GetOrganizationRequest) returns (GetOrganizationResponse);
+  // Resolve a slug to an organization. Internal: the Image Proxy resolves the
+  // slug in a reference path before asking the catalog for the image.
+  rpc GetOrganizationBySlug(GetOrganizationBySlugRequest) returns (GetOrganizationBySlugResponse);
+  // Create the organization platform-shipped resources live in, if no
+  // organization holds that slug, and return the existing one otherwise. It has
+  // no members: cluster admins already hold owner-level access to every
+  // organization, so it is administrable without anyone being added to it.
+  // Internal-only, authenticated as a service identity rather than a user.
+  rpc RegisterPlatformOrganization(RegisterPlatformOrganizationRequest) returns (RegisterPlatformOrganizationResponse);
+  rpc UpdateOrganization(UpdateOrganizationRequest) returns (UpdateOrganizationResponse);
+  rpc DeleteOrganization(DeleteOrganizationRequest) returns (DeleteOrganizationResponse);
+  rpc ListOrganizations(ListOrganizationsRequest) returns (ListOrganizationsResponse);
+  rpc ListAccessibleOrganizations(ListAccessibleOrganizationsRequest) returns (ListAccessibleOrganizationsResponse);
+
+  // --- Members Management ---
+  rpc CreateMembership(CreateMembershipRequest) returns (CreateMembershipResponse);
+  rpc AcceptMembership(AcceptMembershipRequest) returns (AcceptMembershipResponse);
+  rpc DeclineMembership(DeclineMembershipRequest) returns (DeclineMembershipResponse);
+  rpc RemoveMembership(RemoveMembershipRequest) returns (RemoveMembershipResponse);
+  rpc UpdateMembershipRole(UpdateMembershipRoleRequest) returns (UpdateMembershipRoleResponse);
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  rpc ListMyMemberships(ListMyMembershipsRequest) returns (ListMyMembershipsResponse);
+
+  // --- Org Nicknames ---
+  // Self-service org nickname update for the calling identity.
+  rpc SetMyOrgNickname(SetMyOrgNicknameRequest) returns (SetMyOrgNicknameResponse);
+}
+
+// ===========================================================================
+// Enums
+// ===========================================================================
+
+enum MembershipRole {
+  MEMBERSHIP_ROLE_UNSPECIFIED = 0;
+  MEMBERSHIP_ROLE_OWNER = 1;
+  MEMBERSHIP_ROLE_MEMBER = 2;
+}
+
+enum MembershipStatus {
+  MEMBERSHIP_STATUS_UNSPECIFIED = 0;
+  MEMBERSHIP_STATUS_PENDING = 1;
+  MEMBERSHIP_STATUS_ACTIVE = 2;
+}
+
+// ===========================================================================
+// Organization
+// ===========================================================================
+
+message Organization {
+  string id = 1; // UUID
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  string sandbox_default_idle_timeout = 5;
+  string sandbox_default_ttl = 6;
+  // Cluster-wide unique short name. Appears in identifiers that must resolve
+  // without an organization already in context: an app's address and an image
+  // proxy reference. Max 64 chars, pattern ^[a-z0-9-]+$.
+  string slug = 7;
+}
+
+message CreateOrganizationRequest {
+  string name = 1;
+  // Optional. Derived from the name when empty.
+  string slug = 2;
+}
+
+message CreateOrganizationResponse {
+  Organization organization = 1;
+}
+
+message RegisterPlatformOrganizationRequest {
+  string slug = 1;
+  string name = 2;
+}
+
+message RegisterPlatformOrganizationResponse {
+  Organization organization = 1;
+  // False when an organization already held that slug, in which case
+  // organization is the existing record, untouched.
+  bool created = 2;
+}
+
+message GetOrganizationBySlugRequest {
+  string slug = 1;
+}
+
+message GetOrganizationBySlugResponse {
+  Organization organization = 1;
+}
+
+message GetOrganizationRequest {
+  string id = 1; // UUID
+}
+
+message GetOrganizationResponse {
+  Organization organization = 1;
+}
+
+message UpdateOrganizationRequest {
+  string id = 1; // UUID
+  optional string name = 2;
+  optional string sandbox_default_idle_timeout = 3;
+  optional string sandbox_default_ttl = 4;
+  // A rename is visible: app addresses change and image references change,
+  // which costs a one-time container-image cache miss per node. Nothing breaks,
+  // because neither consumer stores a resolved reference.
+  optional string slug = 5;
+}
+
+message UpdateOrganizationResponse {
+  Organization organization = 1;
+}
+
+message DeleteOrganizationRequest {
+  string id = 1; // UUID
+}
+
+message DeleteOrganizationResponse {}
+
+message ListOrganizationsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListOrganizationsResponse {
+  repeated Organization organizations = 1;
+  string next_page_token = 2;
+}
+
+message ListAccessibleOrganizationsRequest {
+  string identity_id = 1; // UUID
+}
+
+message ListAccessibleOrganizationsResponse {
+  repeated Organization organizations = 1;
+}
+
+// ===========================================================================
+// Membership
+// ===========================================================================
+
+message Membership {
+  string id = 1; // UUID
+  string organization_id = 2; // UUID
+  string identity_id = 3; // UUID
+  MembershipRole role = 4;
+  MembershipStatus status = 5;
+  optional google.protobuf.Timestamp expires_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// ===========================================================================
+// CreateMembership
+// ===========================================================================
+
+message CreateMembershipRequest {
+  string organization_id = 1; // UUID
+  string identity_id = 2; // UUID
+  MembershipRole role = 3;
+  optional google.protobuf.Timestamp expires_at = 4;
+}
+
+message CreateMembershipResponse {
+  Membership membership = 1;
+}
+
+// ===========================================================================
+// AcceptMembership
+// ===========================================================================
+
+message AcceptMembershipRequest {
+  string membership_id = 1; // UUID
+}
+
+message AcceptMembershipResponse {
+  Membership membership = 1;
+}
+
+// ===========================================================================
+// DeclineMembership
+// ===========================================================================
+
+message DeclineMembershipRequest {
+  string membership_id = 1; // UUID
+}
+
+message DeclineMembershipResponse {}
+
+// ===========================================================================
+// RemoveMembership
+// ===========================================================================
+
+message RemoveMembershipRequest {
+  string membership_id = 1; // UUID
+}
+
+message RemoveMembershipResponse {}
+
+// ===========================================================================
+// UpdateMembershipRole
+// ===========================================================================
+
+message UpdateMembershipRoleRequest {
+  string membership_id = 1; // UUID
+  MembershipRole role = 2;
+}
+
+message UpdateMembershipRoleResponse {
+  Membership membership = 1;
+}
+
+// ===========================================================================
+// ListMembers
+// ===========================================================================
+
+message ListMembersRequest {
+  string organization_id = 1; // UUID
+  MembershipStatus status = 2; // optional filter; UNSPECIFIED means all
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListMembersResponse {
+  repeated Membership memberships = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// ListMyMemberships
+// ===========================================================================
+
+message ListMyMembershipsRequest {
+  MembershipStatus status = 1; // optional filter; UNSPECIFIED means all
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListMyMembershipsResponse {
+  repeated Membership memberships = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// SetMyOrgNickname
+// ===========================================================================
+
+message SetMyOrgNicknameRequest {
+  string organization_id = 1; // UUID
+  // Organization-scoped nickname for the caller.
+  string nickname = 2;
+}
+
+message SetMyOrgNicknameResponse {}
