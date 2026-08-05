@@ -1,0 +1,109 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/agynio/images
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: "images"
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 50051
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+database:
+  # Plaintext database URL. Leave empty when using an existing secret.
+  url: ""
+  existingSecret:
+    # Secret containing the database URL. Leave empty when using `database.url`.
+    name: agyn-platform-database-urls
+    # Key within the secret that stores the connection string.
+    key: images
+
+authorization:
+  grpcTarget: "authorization:50051"
+
+secretsService:
+  grpcTarget: "secrets:50051"
+
+notifications:
+  # Optional. Without it the service runs and simply publishes nothing, so
+  # Console lists refresh on open rather than reactively.
+  grpcTarget: "notifications:50051"
+
+discovery:
+  # How often each image's repository is polled. RefreshImage covers the
+  # latency this would otherwise add.
+  interval: 15m
+  timeout: 60s
+
+# ResolveVersion and RegisterPlatformImage carry no user identity - they are
+# restricted by reachability rather than by a permission check. Without this
+# policy any workload in the mesh could read every registry credential the
+# platform holds.
+internalAuthorizationPolicy:
+  enabled: true
+  # Service accounts allowed to resolve an image to its upstream credential.
+  resolveVersionServiceAccounts:
+    - name: image-proxy
+      namespace: ""
+    - name: agents
+      namespace: ""
+  # Service accounts allowed to register platform images.
+  registerServiceAccounts:
+    - name: platform-provisioner
+      namespace: ""
+
+# Resources a freshly installed platform needs before anyone can use it. The
+# calls behind this are create-if-absent, so it runs on every install and every
+# upgrade without a guard, and an operator's edit to a provisioned record
+# survives the next release.
+provisioning:
+  enabled: true
+  serviceAccountName: platform-provisioner
+  organizationsGrpcTarget: "organizations:50051"
+  ttlSecondsAfterFinished: 600
+  # The organization platform-shipped resources live in. It has no members;
+  # cluster admins already hold owner-level access to every organization.
+  organization:
+    slug: agyn-platform
+    name: Agyn Platform
+  # Registered public, which is what makes them usable from every organization.
+  images: []
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80

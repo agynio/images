@@ -1,0 +1,14 @@
+version: v2
+
+# Vendored copy of agynio/api/images/v1, so this service builds before the
+# change lands in buf.build/agynio/api. Delete this directory and drop the
+# directory input from buf.gen.yaml once it is published there.
+modules:
+  - path: .
+
+lint:
+  use:
+    - STANDARD
+  except:
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - SERVICE_SUFFIX

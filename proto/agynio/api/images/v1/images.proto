@@ -1,0 +1,295 @@
+syntax = "proto3";
+
+package agynio.api.images.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/agynio/api/gen/agynio/api/images/v1;imagesv1";
+
+// ImagesService owns the image catalog: the Image records an organization
+// authors, and the Version records the platform discovers by reading upstream
+// repositories.
+//
+// It is the only service in the platform that stores a registry URL or a
+// registry credential. Versions are discovered, never authored - there is no
+// create, update, or delete RPC for them.
+service ImagesService {
+  // --- Images ---
+  rpc CreateImage(CreateImageRequest) returns (CreateImageResponse);
+  rpc GetImage(GetImageRequest) returns (GetImageResponse);
+  rpc UpdateImage(UpdateImageRequest) returns (UpdateImageResponse);
+  rpc DeleteImage(DeleteImageRequest) returns (DeleteImageResponse);
+  rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+
+  // --- Versions ---
+  // List discovered versions, newest first. Serves stored rows - never blocks
+  // on the upstream registry.
+  rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+  // Trigger an immediate discovery pass, so a freshly pushed tag appears
+  // without waiting for the poll interval.
+  rpc RefreshImage(RefreshImageRequest) returns (RefreshImageResponse);
+
+  // --- Internal ---
+  // Resolve a reference to an upstream repository and credential. Used by the
+  // Agents service to validate a reference on write, and by the Image Proxy to
+  // serve a pull. Internal only - restricted by Istio, not by an identity
+  // check.
+  rpc ResolveVersion(ResolveVersionRequest) returns (ResolveVersionResponse);
+  // Resolve a reference to an upstream repository and credential without
+  // naming a tag. A blob request carries a digest and no tag, so the Image
+  // Proxy cannot use ResolveVersion for it. Internal only.
+  rpc ResolveImage(ResolveImageRequest) returns (ResolveImageResponse);
+  // Create an image if no image of that name exists in the organization, and
+  // return the existing one otherwise. Never updates, so re-running an upgrade
+  // cannot overwrite a change someone made by hand. Internal only.
+  rpc RegisterPlatformImage(RegisterPlatformImageRequest) returns (RegisterPlatformImageResponse);
+}
+
+// ===========================================================================
+// Common
+// ===========================================================================
+
+// Metadata shared by every resource.
+message EntityMeta {
+  string id = 1; // UUID
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+// ===========================================================================
+// Enums
+// ===========================================================================
+
+// Which slot in a workload the image is built for.
+enum ImageType {
+  IMAGE_TYPE_UNSPECIFIED = 0;
+  // The workload's main container - a devcontainer.
+  IMAGE_TYPE_WORKSPACE = 1;
+  // An init container supplying an agent CLI binary and its config.json.
+  IMAGE_TYPE_AGENT_RUNTIME = 2;
+  // A sidecar container running an MCP server.
+  IMAGE_TYPE_MCP = 3;
+}
+
+// Who may read - and therefore use - the image.
+enum ImageVisibility {
+  IMAGE_VISIBILITY_UNSPECIFIED = 0;
+  // Readable by members of the owning organization.
+  IMAGE_VISIBILITY_INTERNAL = 1;
+  // Readable by any authenticated identity, on any organization.
+  IMAGE_VISIBILITY_PUBLIC = 2;
+}
+
+enum ImageVersionState {
+  IMAGE_VERSION_STATE_UNSPECIFIED = 0;
+  // The tag is listed upstream.
+  IMAGE_VERSION_STATE_PRESENT = 1;
+  // The tag is no longer listed upstream. Marked rather than deleted, so
+  // environments naming it can be reported as unschedulable.
+  IMAGE_VERSION_STATE_GONE = 2;
+}
+
+// ===========================================================================
+// Image
+// ===========================================================================
+
+message Image {
+  EntityMeta meta = 1;
+  string organization_id = 2; // UUID - owning organization
+  string name = 3; // Unique within the organization
+  string description = 4;
+  ImageType type = 5; // Immutable
+  string repository = 6; // Upstream repository, e.g. "ghcr.io/agynio/devcontainer-go". Immutable
+  string username = 7; // Registry username. Empty for anonymously readable repositories
+  string secret_id = 8; // UUID - Secret holding the registry password. Empty when there is none
+  ImageVisibility visibility = 9;
+  string tag_filter = 10; // Optional pattern limiting which tags appear in pickers
+  // Set when discovery cannot reach the repository. Stored versions continue
+  // to be served while this is set.
+  optional google.protobuf.Timestamp stale_since = 11;
+  // When discovery last completed successfully.
+  optional google.protobuf.Timestamp last_discovery_at = 12;
+}
+
+message CreateImageRequest {
+  string organization_id = 1;
+  string name = 2;
+  string description = 3;
+  ImageType type = 4;
+  string repository = 5;
+  string username = 6;
+  // Registry password. Write-only: stored as a Secret owned by the same
+  // organization and never returned.
+  string password = 7;
+  ImageVisibility visibility = 8;
+  string tag_filter = 9;
+}
+
+message CreateImageResponse {
+  Image image = 1;
+}
+
+message GetImageRequest {
+  string id = 1; // UUID
+}
+
+message GetImageResponse {
+  Image image = 1;
+}
+
+// repository and type are absent deliberately: both are statements about what
+// the record is, and changing either silently redefines every environment
+// referencing it.
+message UpdateImageRequest {
+  string id = 1; // UUID
+  optional string name = 2;
+  optional string description = 3;
+  optional string username = 4;
+  optional string password = 5;
+  optional ImageVisibility visibility = 6;
+  optional string tag_filter = 7;
+}
+
+message UpdateImageResponse {
+  Image image = 1;
+}
+
+message DeleteImageRequest {
+  string id = 1; // UUID
+}
+
+message DeleteImageResponse {}
+
+// Lists the images available to an organization: its own, plus every public
+// image on the platform.
+message ListImagesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string organization_id = 3;
+  // Optional filter. IMAGE_TYPE_UNSPECIFIED returns every type.
+  ImageType type = 4;
+}
+
+message ListImagesResponse {
+  repeated Image images = 1;
+  string next_page_token = 2;
+}
+
+// ===========================================================================
+// Version
+// ===========================================================================
+
+// A tag observed in an image's upstream repository. Discovered, never authored.
+message ImageVersion {
+  string id = 1; // UUID
+  string image_id = 2; // UUID
+  string tag = 3; // The tag as it appears upstream
+  optional google.protobuf.Timestamp pushed_at = 4; // Read from the upstream manifest
+  string description = 5; // The image's own org.opencontainers.image.description, when declared
+  ImageVersionState state = 6;
+  google.protobuf.Timestamp discovered_at = 7; // First time the platform observed this tag
+}
+
+message ListVersionsRequest {
+  string image_id = 1; // UUID
+  int32 page_size = 2;
+  string page_token = 3;
+  // Include versions whose tag is no longer listed upstream. Off by default:
+  // pickers show what can be selected, and a gone tag cannot.
+  bool include_gone = 4;
+}
+
+message ListVersionsResponse {
+  repeated ImageVersion versions = 1;
+  string next_page_token = 2;
+}
+
+message RefreshImageRequest {
+  string image_id = 1; // UUID
+}
+
+message RefreshImageResponse {
+  // The image after the pass, carrying updated staleness.
+  Image image = 1;
+  // Every present version after the pass, newest first. A refresh is triggered
+  // by a picker or an image page opening, both of which want the list.
+  repeated ImageVersion versions = 2;
+}
+
+// ===========================================================================
+// Internal
+// ===========================================================================
+
+// Names an image by owning organization and name, which is what the image
+// proxy's reference path encodes once it has resolved the organization slug.
+message ImageRef {
+  string organization_id = 1; // UUID
+  string name = 2;
+}
+
+message ResolveVersionRequest {
+  oneof reference {
+    string image_id = 1; // UUID
+    ImageRef ref = 2;
+  }
+  string tag = 3;
+  // Optional. When set, visibility is enforced against this organization: the
+  // image must be owned by it or be public. The Agents service passes the
+  // organization whose environment holds the reference.
+  string consumer_organization_id = 4;
+  // Optional. When set, the resolved image must be of this type. The Agents
+  // service passes the type the slot requires.
+  ImageType require_type = 5;
+}
+
+message ResolveVersionResponse {
+  Image image = 1;
+  // Upstream repository the pull is served from.
+  string repository = 2;
+  // The tag as it will be requested upstream.
+  string tag = 3;
+  // State of the resolved version. A gone tag resolves so the caller can
+  // report it, rather than failing as though the reference were malformed.
+  ImageVersionState state = 4;
+  // Registry credential for the repository. Empty for anonymously readable
+  // repositories.
+  string username = 5;
+  string password = 6;
+}
+
+message ResolveImageRequest {
+  oneof reference {
+    string image_id = 1; // UUID
+    ImageRef ref = 2;
+  }
+  // Optional. When set, visibility is enforced against this organization.
+  string consumer_organization_id = 3;
+}
+
+message ResolveImageResponse {
+  Image image = 1;
+  string repository = 2;
+  // Registry credential for the repository. Empty for anonymously readable
+  // repositories.
+  string username = 3;
+  string password = 4;
+}
+
+message RegisterPlatformImageRequest {
+  string organization_id = 1;
+  string name = 2;
+  string description = 3;
+  ImageType type = 4;
+  string repository = 5;
+  string username = 6;
+  string password = 7;
+  ImageVisibility visibility = 8;
+  string tag_filter = 9;
+}
+
+message RegisterPlatformImageResponse {
+  Image image = 1;
+  // False when an image of that name already existed, in which case image is
+  // the existing record, untouched.
+  bool created = 2;
+}
