@@ -93,7 +93,30 @@ provisioning:
     slug: agyn-platform
     name: Agyn Platform
   # Registered public, which is what makes them usable from every organization.
-  images: []
+  # An environment names a workspace image and an agent runtime image, so a
+  # fresh platform ships one of each kind that is usable without registering
+  # anything by hand.
+  images:
+    - name: devcontainer
+      description: Default workspace image.
+      type: workspace
+      repository: ghcr.io/agynio/devcontainer
+      visibility: public
+    - name: codex
+      description: Codex agent runtime.
+      type: agent_runtime
+      repository: ghcr.io/agynio/agyn-runtime-codex
+      visibility: public
+    - name: claude
+      description: Claude Code agent runtime.
+      type: agent_runtime
+      repository: ghcr.io/agynio/agyn-runtime-claude
+      visibility: public
+    - name: agn
+      description: agn agent runtime.
+      type: agent_runtime
+      repository: ghcr.io/agynio/agyn-runtime-agn
+      visibility: public
   resources:
     requests:
       cpu: 10m
