@@ -30,13 +30,8 @@ functions:
                 - -c
                 - |
                   set -eu
-                  elapsed=0
-                  while [ ! -f /opt/app/data/go.mod ]; do
-                    sleep 1; elapsed=$((elapsed + 1))
-                    [ "$elapsed" -ge 120 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
-                  done
-                  buf generate
-                  exec go run ./cmd/images-service
+                  echo "Images DevSpace container ready."
+                  tail -f /dev/null
               volumeMounts:
                 - name: data
                   mountPath: /opt/app/data
@@ -76,6 +71,17 @@ pipelines:
         start_dev --disable-pod-replace images
       else
         start_dev --disable-pod-replace images
+        echo "Starting images service from synced source..."
+        exec_container --label-selector=app.kubernetes.io/name=images -n ${IMAGES_NAMESPACE} -- bash -lc 'set -euo pipefail
+          cd /opt/app/data
+          elapsed=0
+          while [ ! -f go.mod ]; do
+            sleep 1; elapsed=$((elapsed + 1))
+            [ "$elapsed" -ge 300 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
+          done
+          buf generate
+          nohup go run ./cmd/images-service >/tmp/images-service.log 2>&1 &
+        '
         echo "Waiting for images to be healthy on :50051..."
         healthy=false
         for i in $(seq 1 60); do
