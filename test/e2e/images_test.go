@@ -321,51 +321,6 @@ func TestResolveVersionEnforcesType(t *testing.T) {
 	}
 }
 
-// Re-running provisioning must change nothing, and must not overwrite an edit
-// an operator made by hand.
-func TestRegisterPlatformImageIsCreateIfAbsent(t *testing.T) {
-	ctx := internalContext(t)
-	client := dial(t)
-	name := "e2e-platform-" + shortID()
-	request := &imagesv1.RegisterPlatformImageRequest{
-		OrganizationId: organizationID,
-		Name:           name,
-		Description:    "as shipped",
-		Type:           imagesv1.ImageType_IMAGE_TYPE_WORKSPACE,
-		Repository:     publicRepository,
-		Visibility:     imagesv1.ImageVisibility_IMAGE_VISIBILITY_PUBLIC,
-	}
-
-	first, err := client.RegisterPlatformImage(ctx, request)
-	if err != nil {
-		t.Fatalf("RegisterPlatformImage: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = client.DeleteImage(asOwner(t), &imagesv1.DeleteImageRequest{Id: first.GetImage().GetMeta().GetId()})
-	})
-	if !first.GetCreated() {
-		t.Fatal("expected the first registration to create")
-	}
-
-	if _, err := client.UpdateImage(asOwner(t), &imagesv1.UpdateImageRequest{
-		Id:          first.GetImage().GetMeta().GetId(),
-		Description: strPtr("edited by an operator"),
-	}); err != nil {
-		t.Fatalf("UpdateImage: %v", err)
-	}
-
-	second, err := client.RegisterPlatformImage(ctx, request)
-	if err != nil {
-		t.Fatalf("RegisterPlatformImage (second run): %v", err)
-	}
-	if second.GetCreated() {
-		t.Fatal("expected the second registration to be a no-op")
-	}
-	if second.GetImage().GetDescription() != "edited by an operator" {
-		t.Fatalf("description = %q, want the operator's edit to survive", second.GetImage().GetDescription())
-	}
-}
-
 // Deleting an image is permitted regardless of references: the platform flags a
 // missing late-bound target rather than blocking the delete.
 func TestDeleteIsNotBlocked(t *testing.T) {

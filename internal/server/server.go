@@ -323,68 +323,6 @@ func (s *Server) ResolveImage(ctx context.Context, req *imagesv1.ResolveImageReq
 	}, nil
 }
 
-// RegisterPlatformImage creates an image when nothing of that name exists in
-// the organization and returns the existing one otherwise. It never updates, so
-// re-running an upgrade cannot overwrite a change an operator made by hand.
-func (s *Server) RegisterPlatformImage(ctx context.Context, req *imagesv1.RegisterPlatformImageRequest) (*imagesv1.RegisterPlatformImageResponse, error) {
-	organizationID, err := parseUUID("organization_id", req.GetOrganizationId())
-	if err != nil {
-		return nil, err
-	}
-	existing, err := s.store.GetImageByName(ctx, organizationID, req.GetName())
-	switch {
-	case err == nil:
-		return &imagesv1.RegisterPlatformImageResponse{Image: toProtoImage(existing), Created: false}, nil
-	case !errors.Is(err, store.ErrImageNotFound):
-		return nil, translateStoreError(err)
-	}
-
-	create := &imagesv1.CreateImageRequest{
-		OrganizationId: req.GetOrganizationId(),
-		Name:           req.GetName(),
-		Description:    req.GetDescription(),
-		Type:           req.GetType(),
-		Repository:     req.GetRepository(),
-		Username:       req.GetUsername(),
-		Password:       req.GetPassword(),
-		Visibility:     req.GetVisibility(),
-		TagFilter:      req.GetTagFilter(),
-	}
-	input, err := validateCreate(create)
-	if err != nil {
-		return nil, err
-	}
-	input.OrganizationID = organizationID
-
-	// Readability is deliberately not checked here, unlike CreateImage. A user
-	// typo should fail at registration; a platform image registered during
-	// install should not take the install down because a registry is briefly
-	// unreachable, or because the release that publishes the image and the
-	// release that registers it land seconds apart. Discovery flags it stale
-	// and picks it up on the next pass.
-	secretID, err := s.storeCredential(ctx, organizationID, input.Name, req.GetPassword())
-	if err != nil {
-		return nil, err
-	}
-	input.SecretID = secretID
-
-	image, err := s.store.CreateImage(ctx, input)
-	if err != nil {
-		s.discardCredential(ctx, secretID)
-		// A concurrent provisioning run won the insert; returning its record
-		// keeps the call create-if-absent rather than failing the upgrade.
-		if errors.Is(err, store.ErrNameTaken) {
-			if raced, getErr := s.store.GetImageByName(ctx, organizationID, input.Name); getErr == nil {
-				return &imagesv1.RegisterPlatformImageResponse{Image: toProtoImage(raced), Created: false}, nil
-			}
-		}
-		return nil, translateStoreError(err)
-	}
-
-	s.discoverNow(ctx, image)
-	return &imagesv1.RegisterPlatformImageResponse{Image: toProtoImage(image), Created: true}, nil
-}
-
 // resolveReference settles which image a request names - by id, or by the
 // (organization, name) pair the proxy's reference path encodes.
 func (s *Server) resolveReference(ctx context.Context, imageID string, ref *imagesv1.ImageRef) (store.Image, error) {

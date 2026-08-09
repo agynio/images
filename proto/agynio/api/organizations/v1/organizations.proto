@@ -21,7 +21,9 @@ service OrganizationsService {
   // no members: cluster admins already hold owner-level access to every
   // organization, so it is administrable without anyone being added to it.
   // Internal-only, authenticated as a service identity rather than a user.
-  rpc RegisterPlatformOrganization(RegisterPlatformOrganizationRequest) returns (RegisterPlatformOrganizationResponse);
+  rpc RegisterPlatformOrganization(RegisterPlatformOrganizationRequest) returns (RegisterPlatformOrganizationResponse) {
+    option deprecated = true;
+  }
   rpc UpdateOrganization(UpdateOrganizationRequest) returns (UpdateOrganizationResponse);
   rpc DeleteOrganization(DeleteOrganizationRequest) returns (DeleteOrganizationResponse);
   rpc ListOrganizations(ListOrganizationsRequest) returns (ListOrganizationsResponse);
@@ -85,11 +87,15 @@ message CreateOrganizationResponse {
 }
 
 message RegisterPlatformOrganizationRequest {
+  option deprecated = true;
+
   string slug = 1;
   string name = 2;
 }
 
 message RegisterPlatformOrganizationResponse {
+  option deprecated = true;
+
   Organization organization = 1;
   // False when an organization already held that slug, in which case
   // organization is the existing record, untouched.

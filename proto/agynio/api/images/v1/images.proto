@@ -39,10 +39,13 @@ service ImagesService {
   // naming a tag. A blob request carries a digest and no tag, so the Image
   // Proxy cannot use ResolveVersion for it. Internal only.
   rpc ResolveImage(ResolveImageRequest) returns (ResolveImageResponse);
-  // Create an image if no image of that name exists in the organization, and
-  // return the existing one otherwise. Never updates, so re-running an upgrade
-  // cannot overwrite a change someone made by hand. Internal only.
-  rpc RegisterPlatformImage(RegisterPlatformImageRequest) returns (RegisterPlatformImageResponse);
+  // Superseded by provisioning: the images a release ships are declared by it
+  // and created through CreateImage as a cluster admin, so no second creation
+  // path exists for install. Retained so existing callers keep compiling while
+  // they migrate; the service does not implement it.
+  rpc RegisterPlatformImage(RegisterPlatformImageRequest) returns (RegisterPlatformImageResponse) {
+    option deprecated = true;
+  }
 }
 
 // ===========================================================================
@@ -276,6 +279,8 @@ message ResolveImageResponse {
 }
 
 message RegisterPlatformImageRequest {
+  option deprecated = true;
+
   string organization_id = 1;
   string name = 2;
   string description = 3;
@@ -288,6 +293,8 @@ message RegisterPlatformImageRequest {
 }
 
 message RegisterPlatformImageResponse {
+  option deprecated = true;
+
   Image image = 1;
   // False when an image of that name already existed, in which case image is
   // the existing record, untouched.

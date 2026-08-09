@@ -20,12 +20,12 @@ const (
 // against existing organization relations, so images need no per-resource
 // tuples and no share management.
 
-// requireOrganizationOwner gates the authored writes. It demands an identity
-// rather than tolerating its absence: the Gateway forwards a request with no
-// identity when it carries no token, so treating absence as an internal caller
-// would let anyone who can reach the Gateway author images. The internal write
-// path is RegisterPlatformImage, which is a separate RPC the Gateway does not
-// expose and Istio restricts.
+// requireOrganizationOwner gates the writes. It demands an identity rather than
+// tolerating its absence: the Gateway forwards a request with no identity when
+// it carries no token, so treating absence as an internal caller would let
+// anyone who can reach the Gateway author images. There is no second write path
+// -- the images a release ships are created through this one, by the
+// provisioning controller as a cluster admin.
 func (s *Server) requireOrganizationOwner(ctx context.Context, organizationID uuid.UUID) error {
 	identityID, err := identityFromContext(ctx)
 	if err != nil {
@@ -61,8 +61,8 @@ func (s *Server) requireImageRead(ctx context.Context, image store.Image) error 
 
 // organizationListScope settles which organization a list reads. An identified
 // caller names one and must be a member of it; an internal caller that names
-// none reads everything, which is what lets the proxy and the provisioner work
-// without an identity.
+// none reads everything, which is what lets the Image Proxy work without an
+// identity.
 func (s *Server) organizationListScope(ctx context.Context, organizationID string) (*uuid.UUID, error) {
 	identityID, hasIdentity, err := optionalIdentityFromContext(ctx)
 	if err != nil {
