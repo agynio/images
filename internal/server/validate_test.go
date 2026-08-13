@@ -57,6 +57,7 @@ func TestValidateCreateRejectsBadInput(t *testing.T) {
 		{"repository with digest", func(r *imagesv1.CreateImageRequest) {
 			r.Repository = "ghcr.io/agynio/devcontainer-go@sha256:abc"
 		}, "repository"},
+		{"malformed secret id", func(r *imagesv1.CreateImageRequest) { r.SecretId = "not-a-uuid" }, "secret_id"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -98,6 +99,40 @@ func TestValidateUpdateCarriesOnlyWhatWasSet(t *testing.T) {
 	}
 	if input.Description != nil || input.Username != nil || input.Visibility != nil || input.TagFilter != nil {
 		t.Fatal("expected untouched fields to stay absent")
+	}
+	if input.SecretID != nil {
+		t.Fatal("expected an unset credential to stay absent")
+	}
+}
+
+// An empty secret_id is how a credential is dropped, which is different from
+// leaving it alone: the first clears the column, the second does not touch it.
+func TestValidateUpdateDistinguishesDroppingTheCredential(t *testing.T) {
+	empty := ""
+	input, err := validateUpdate(&imagesv1.UpdateImageRequest{
+		Id:       "11111111-1111-1111-1111-111111111111",
+		SecretId: &empty,
+	})
+	if err != nil {
+		t.Fatalf("validateUpdate: %v", err)
+	}
+	if input.SecretID == nil {
+		t.Fatal("expected the credential to be carried")
+	}
+	if *input.SecretID != nil {
+		t.Fatal("expected an empty secret_id to clear the reference")
+	}
+
+	named := "22222222-2222-2222-2222-222222222222"
+	input, err = validateUpdate(&imagesv1.UpdateImageRequest{
+		Id:       "11111111-1111-1111-1111-111111111111",
+		SecretId: &named,
+	})
+	if err != nil {
+		t.Fatalf("validateUpdate: %v", err)
+	}
+	if input.SecretID == nil || *input.SecretID == nil || (*input.SecretID).String() != named {
+		t.Fatalf("expected the named secret to be carried, got %v", input.SecretID)
 	}
 }
 

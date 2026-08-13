@@ -73,6 +73,10 @@ internalAuthorizationPolicy:
       namespace: ""
     - name: agents
       namespace: ""
+  # Service accounts allowed to ask which images hold a secret by reference.
+  countReferencesServiceAccounts:
+    - name: secrets
+      namespace: ""
 
 autoscaling:
   enabled: false
