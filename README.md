@@ -4,9 +4,10 @@ The Images service. It owns the [image catalog](https://github.com/agynio/archit
 the `Image` records an organization authors, and the `Version` records the
 platform discovers by reading upstream repositories.
 
-It is the only service in the platform that stores a registry URL or a registry
-credential. Versions are discovered, never authored — there is no create,
-update, or delete API for them.
+It is the only service in the platform that stores a registry URL. The
+credential to read that registry is an ordinary Secret the registrar creates,
+named here by id and resolved on the internal path. Versions are discovered,
+never authored — there is no create, update, or delete API for them.
 
 ## Layout
 
@@ -70,7 +71,7 @@ discovery rather than a stub. `TEST_PUBLIC_REPOSITORY` overrides which one.
 | `DATABASE_URL` | required | PostgreSQL connection string |
 | `GRPC_ADDRESS` | `:50051` | Listen address |
 | `AUTHORIZATION_GRPC_TARGET` | required | Permission checks |
-| `SECRETS_GRPC_TARGET` | required | Registry password storage and resolution |
+| `SECRETS_GRPC_TARGET` | required | Validating and resolving the Secret an image names |
 | `NOTIFICATIONS_GRPC_TARGET` | optional | `image.updated`; without it, Console lists refresh on open |
 | `DISCOVERY_INTERVAL` | `15m` | How often each repository is polled |
 | `DISCOVERY_TIMEOUT` | `60s` | Budget for one image's pass |

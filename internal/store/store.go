@@ -190,6 +190,27 @@ func (s *Store) DeleteImage(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// ImageIDsBySecret answers the Secrets service's reference check before a
+// delete. Ordered so a caller naming the blockers reports them the same way
+// twice.
+func (s *Store) ImageIDsBySecret(ctx context.Context, secretID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id FROM images WHERE secret_id = $1 ORDER BY id`, secretID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 type ListImagesParams struct {
 	// The organization reading. Its own images and every public image are
 	// returned; visibility is a read rule, so it belongs in the query rather

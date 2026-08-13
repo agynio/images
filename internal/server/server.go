@@ -26,10 +26,8 @@ type AuthorizationClient interface {
 }
 
 type SecretsClient interface {
-	CreateSecret(ctx context.Context, req *secretsv1.CreateSecretRequest, opts ...grpc.CallOption) (*secretsv1.CreateSecretResponse, error)
-	UpdateSecret(ctx context.Context, req *secretsv1.UpdateSecretRequest, opts ...grpc.CallOption) (*secretsv1.UpdateSecretResponse, error)
-	DeleteSecret(ctx context.Context, req *secretsv1.DeleteSecretRequest, opts ...grpc.CallOption) (*secretsv1.DeleteSecretResponse, error)
 	ResolveSecret(ctx context.Context, req *secretsv1.ResolveSecretRequest, opts ...grpc.CallOption) (*secretsv1.ResolveSecretResponse, error)
+	ResolveSecretExists(ctx context.Context, req *secretsv1.ResolveSecretExistsRequest, opts ...grpc.CallOption) (*secretsv1.ResolveSecretExistsResponse, error)
 }
 
 type NotificationsClient interface {
@@ -79,23 +77,24 @@ func (s *Server) CreateImage(ctx context.Context, req *imagesv1.CreateImageReque
 		return nil, err
 	}
 	input.OrganizationID = organizationID
+	if input.SecretID != nil {
+		if err := s.requireOwnedSecret(ctx, organizationID, *input.SecretID); err != nil {
+			return nil, err
+		}
+	}
 
 	// Validating readability before storing is what makes a typo or a wrong
 	// credential fail at registration rather than at workload start.
-	credential := registry.Credential{Username: req.GetUsername(), Password: req.GetPassword()}
+	credential, err := s.resolveCredential(ctx, input.Username, input.SecretID)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.checkReadable(ctx, input.Repository, credential); err != nil {
 		return nil, err
 	}
 
-	secretID, err := s.storeCredential(ctx, organizationID, input.Name, req.GetPassword())
-	if err != nil {
-		return nil, err
-	}
-	input.SecretID = secretID
-
 	image, err := s.store.CreateImage(ctx, input)
 	if err != nil {
-		s.discardCredential(ctx, secretID)
 		return nil, translateStoreError(err)
 	}
 
@@ -128,12 +127,31 @@ func (s *Server) UpdateImage(ctx context.Context, req *imagesv1.UpdateImageReque
 		return nil, err
 	}
 
-	if req.Password != nil {
-		secretID, err := s.replaceCredential(ctx, existing, req.GetPassword())
+	if input.SecretID != nil && *input.SecretID != nil {
+		if err := s.requireOwnedSecret(ctx, existing.OrganizationID, **input.SecretID); err != nil {
+			return nil, err
+		}
+	}
+
+	// A changed credential is read against the repository before it is stored,
+	// for the same reason registration is: an owner rotating a password should
+	// learn they mistyped it here, not from a stale badge on the next pass.
+	if input.Username != nil || input.SecretID != nil {
+		username := existing.Username
+		if input.Username != nil {
+			username = *input.Username
+		}
+		secretID := existing.SecretID
+		if input.SecretID != nil {
+			secretID = *input.SecretID
+		}
+		credential, err := s.resolveCredential(ctx, username, secretID)
 		if err != nil {
 			return nil, err
 		}
-		input.SecretID = &secretID
+		if err := s.checkReadable(ctx, existing.Repository, credential); err != nil {
+			return nil, err
+		}
 	}
 
 	image, err := s.store.UpdateImage(ctx, id, input)
@@ -163,10 +181,11 @@ func (s *Server) DeleteImage(ctx context.Context, req *imagesv1.DeleteImageReque
 	if err := s.requireOrganizationOwner(ctx, existing.OrganizationID); err != nil {
 		return nil, err
 	}
+	// The credential is not deleted with the image: the Secret is the
+	// registrar's, and it may well be named by another image.
 	if err := s.store.DeleteImage(ctx, id); err != nil {
 		return nil, translateStoreError(err)
 	}
-	s.discardCredential(ctx, existing.SecretID)
 	return &imagesv1.DeleteImageResponse{}, nil
 }
 
@@ -287,7 +306,7 @@ func (s *Server) ResolveVersion(ctx context.Context, req *imagesv1.ResolveVersio
 		return nil, status.Errorf(codes.NotFound, "tag %q is not a discovered version of image %s", tag, image.Name)
 	}
 
-	credential, err := s.resolveCredential(ctx, image)
+	credential, err := s.resolveCredential(ctx, image.Username, image.SecretID)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +330,7 @@ func (s *Server) ResolveImage(ctx context.Context, req *imagesv1.ResolveImageReq
 	if err := s.enforceConsumer(image, req.GetConsumerOrganizationId()); err != nil {
 		return nil, err
 	}
-	credential, err := s.resolveCredential(ctx, image)
+	credential, err := s.resolveCredential(ctx, image.Username, image.SecretID)
 	if err != nil {
 		return nil, err
 	}
@@ -321,6 +340,25 @@ func (s *Server) ResolveImage(ctx context.Context, req *imagesv1.ResolveImageReq
 		Username:   credential.Username,
 		Password:   credential.Password,
 	}, nil
+}
+
+// CountImagesReferencingSecret is internal: the Secrets service calls it before
+// a delete, so a credential an image is reading with cannot be deleted out from
+// under it. Restricted by Istio rather than by an identity check.
+func (s *Server) CountImagesReferencingSecret(ctx context.Context, req *imagesv1.CountImagesReferencingSecretRequest) (*imagesv1.CountImagesReferencingSecretResponse, error) {
+	secretID, err := parseUUID("secret_id", req.GetSecretId())
+	if err != nil {
+		return nil, err
+	}
+	ids, err := s.store.ImageIDsBySecret(ctx, secretID)
+	if err != nil {
+		return nil, translateStoreError(err)
+	}
+	response := &imagesv1.CountImagesReferencingSecretResponse{Count: int32(len(ids))}
+	for _, id := range ids {
+		response.ImageIds = append(response.ImageIds, id.String())
+	}
+	return response, nil
 }
 
 // resolveReference settles which image a request names - by id, or by the

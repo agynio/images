@@ -9,6 +9,7 @@ import (
 	imagesv1 "github.com/agynio/images/gen/agynio/api/images/v1"
 	"github.com/agynio/images/internal/store"
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -37,12 +38,17 @@ func validateCreate(req *imagesv1.CreateImageRequest) (store.CreateImageInput, e
 	if err := validateTagFilter(req.GetTagFilter()); err != nil {
 		return store.CreateImageInput{}, err
 	}
+	secretID, err := validateSecretID(req.GetSecretId())
+	if err != nil {
+		return store.CreateImageInput{}, err
+	}
 	return store.CreateImageInput{
 		Name:        imageName,
 		Description: req.GetDescription(),
 		Type:        imageType,
 		Repository:  repository,
 		Username:    req.GetUsername(),
+		SecretID:    secretID,
 		Visibility:  visibility,
 		TagFilter:   req.GetTagFilter(),
 	}, nil
@@ -81,7 +87,28 @@ func validateUpdate(req *imagesv1.UpdateImageRequest) (store.UpdateImageInput, e
 		filter := req.GetTagFilter()
 		input.TagFilter = &filter
 	}
+	if req.SecretId != nil {
+		secretID, err := validateSecretID(req.GetSecretId())
+		if err != nil {
+			return store.UpdateImageInput{}, err
+		}
+		input.SecretID = &secretID
+	}
 	return input, nil
+}
+
+// validateSecretID reads an optional reference: empty means the repository is
+// read anonymously, which is also how a credential is dropped on update.
+func validateSecretID(value string) (*uuid.UUID, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+	id, err := uuid.Parse(trimmed)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "secret_id: %v", err)
+	}
+	return &id, nil
 }
 
 func validateName(value string) (string, error) {
